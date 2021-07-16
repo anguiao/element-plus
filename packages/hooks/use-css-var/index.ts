@@ -1,23 +1,69 @@
-import { watch, isRef } from 'vue'
+import {
+  watch,
+  isRef,
+  onMounted,
+  computed,
+  unref,
+} from 'vue'
 import type { Ref, WatchStopHandle } from 'vue'
 
 let stopWatchCssVar: WatchStopHandle | null = null
 
+
+/**
+ * @param vars
+ * @param target
+ * @returns stopWatchHandler
+ * @example
+ *
+ * If you pass a Ref vars param, it will generate a watch handler.
+ *
+ * In main.ts:
+ *
+ * ```ts
+ * const themeVars ={
+ *  '--el-color-primary': '#f44336',
+ *  '--el-color-white': '#2196f3',
+ * }
+ * useCssVar(themeVars)
+ * ```
+ *
+ * In components' steup:
+ *
+ * ```ts
+ * setup() {
+ *  const themeVars = ref({
+ *    '--el-button-default-background-color': '#f44336',
+ *    '--el-button-default-font-color': '#2196f3',
+ *  })
+ *  const stop = useCssVar(themeVars)
+ *
+ *  onUnmount(() => {
+ *   stop()
+ *  })
+ * }
+ * ```
+ */
 export function useCssVar(
   vars:
     | Ref<Record<string, string>>
     | Record<string, string>,
-  target?: HTMLElement,
+  target?: Ref<HTMLElement> | HTMLElement,
 ) {
-  const elRef = target || window?.document?.documentElement
+  const elRef = computed(
+    () => unref(target) || window?.document?.documentElement,
+  )
   const VAR_PREFIX = '--el-'
 
-  const setVars = (val: Record<string, string>) => {
+  const setVars = (
+    target: HTMLElement,
+    val: Record<string, string>,
+  ) => {
     Object.keys(val).forEach(key => {
       if (key.startsWith(VAR_PREFIX)) {
-        elRef.style.setProperty(key, val[key])
+        target.style.setProperty(key, val[key])
       } else {
-        elRef.style.setProperty(VAR_PREFIX + key, val[key])
+        target.style.setProperty(VAR_PREFIX + key, val[key])
       }
     })
   }
@@ -27,17 +73,19 @@ export function useCssVar(
     stopWatchCssVar = null
   }
 
-  isRef(vars)
-    ? (stopWatchCssVar = watch(
-      vars,
-      val => {
-        setVars(val)
-      },
-      {
-        immediate: true,
-      },
-    ))
-    : setVars(vars)
+  onMounted(() => {
+    isRef(vars)
+      ? (stopWatchCssVar = watch(
+        vars,
+        val => {
+          setVars(elRef.value, val)
+        },
+        {
+          immediate: true,
+        },
+      ))
+      : setVars(elRef.value, vars)
+  })
 
   return stopWatchCssVar
 }
